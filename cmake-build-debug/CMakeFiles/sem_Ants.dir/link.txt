@@ -1,0 +1,1 @@
+/usr/bin/cc -g CMakeFiles/sem_Ants.dir/main.c.o -o sem_Ants 
