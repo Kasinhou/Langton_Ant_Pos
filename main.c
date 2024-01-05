@@ -3,17 +3,21 @@
 #include <malloc.h>
 #include <time.h>
 #include <stdlib.h>
+#include <unistd.h>
 
-enum Direction {
+/*enum Direction {
     UP,
     DOWN,
     RIGHT,
     LEFT
-};
+};*/
 
 typedef struct ant_t {
+    //na akom policku stoji
+    int actualField;
     int position;
-    enum Direction direction;
+    int direction; //0up 1right 2down 3left
+    //enum Direction direction;
 } ant_t;
 
 typedef struct world_t {
@@ -34,6 +38,25 @@ void createWorld(world_t *world, int rows, int columns, int ants, int movement) 
     //printf("%d %d %d %d", world->rows, world->columns, world->ants, world->movement);
 }
 
+void destroyAnt(ant_t *ant, world_t *world) {
+    //nejako mravca treba znicit mozno okrem toho ze zmenime poziciu
+    //ak sa stretnu dva tak proste zmenime na bielu
+    world->array_world[ant->position] = 1;
+    ant->position = -1;
+    world->ants--;
+}
+
+void createAnt(world_t *world, ant_t *ant, int position, int direction) {
+    ant->position = position;
+    ant->direction = direction;
+    ant->actualField = world->array_world[ant->position];
+    if (ant->actualField != 2) {
+        world->array_world[ant->position] = 2;//znak mravca
+    } else {
+        destroyAnt(ant, world);
+    }
+}
+
 void destroyWorld(world_t *world) {
     free(world->array_world);
     world->rows = 0;
@@ -42,17 +65,16 @@ void destroyWorld(world_t *world) {
     world->movement = 0;
 }
 
-//void createAnt() destroyAnt() ???
 
 void generateBlackFields(world_t *world) {
     int count = world->rows * world->columns;
     //pravdepodobnost cierneho policka
     double probability = (double)rand() / RAND_MAX;
-    printf("%.2f and %d", probability * 100, count);
+    printf("%.2f and %d\n", probability * 100, count);
     for (int i = 0; i < count; ++i) {
         //ak je vygenerovane cislo mensie ako probability tak je cierna (cierna 0 biela 1 mravec 2);
         if ((double)rand() / RAND_MAX < probability) {
-            world->array_world[i] = 0;
+            world->array_world[i] = -1;
         }
         else {
             world->array_world[i] = 1;
@@ -69,7 +91,8 @@ void defineBlackFieldsByHand(world_t *world) {
             if (number != 0 && number != 1) {
                 number = 1;
             }
-            world->array_world[i * world->columns + j] = number;
+            world->array_world[i * world->columns + j] = (number == 1) ? number : -1;
+            //world->array_world[i * world->columns + j] = number;
         }
     }
 }
@@ -77,15 +100,101 @@ void defineBlackFieldsByHand(world_t *world) {
 void showWorldState(world_t *world) {
     for (int i = 0; i < world->rows; ++i) {
         for (int j = 0; j < world->columns; ++j) {
-            printf("%d ", world->array_world[i * world->columns + j]);
+            switch (world->array_world[i * world->columns + j]) {
+                case -1:
+                    printf("# ");
+                    break;
+                case 1:
+                    printf("O ");
+                    break;
+                case 2:
+                    printf("X ");
+                    break;
+                default:
+                    printf("Something went wrong with world array. Unexpected character!\n");
+                    return;
+            }
+            //printf("%d ", world->array_world[i * world->columns + j]);
         }
         printf("\n");
     }
+    printf("\n");
 }
 
+//direct -> biele 1 otocka vpravo, zmena na cierne 0, type direct/inverse
+//TODO zatial bez kolizi mravcov, treba doriesit
+void antsStep(world_t *world, ant_t *ant, int type) {
+    _Bool step = false;
+    while (!step) {
+        if (ant->actualField == type) {
+            ant->direction = (ant->direction + 3) % 4;
+            //pohyb este
+        } else {
+            ant->direction = (ant->direction + 1) % 4;
+        }
+
+        switch (ant->direction) {
+            case 0:
+                if (ant->position / world->columns != 0) {
+                    //zmenit field na actual field opacnej farby, position mravca, actual field na nove, nove na 2
+                    world->array_world[ant->position] = (ant->actualField * -1);
+                    //zalezi od smeru vypocet
+                    ant->position -= world->columns;
+                    ant->actualField = world->array_world[ant->position];
+                    world->array_world[ant->position] = 2;
+                    step = true;
+                }
+                break;
+            case 1:
+                if (ant->position % world->columns != world->rows) {
+                    world->array_world[ant->position] = (ant->actualField * -1);
+                    ant->position++;
+                    ant->actualField = world->array_world[ant->position];
+                    world->array_world[ant->position] = 2;
+                    step = true;
+                }
+                break;
+            case 2:
+                if (ant->position / world->columns != world->rows - 1) {
+                    world->array_world[ant->position] = (ant->actualField * -1);
+                    ant->position += world->columns;
+                    ant->actualField = world->array_world[ant->position];
+                    world->array_world[ant->position] = 2;
+                    step = true;
+                }
+                break;
+            case 3:
+                if (ant->position % world->columns != 0) {
+                    world->array_world[ant->position] = (ant->actualField * -1);
+                    ant->position--;
+                    ant->actualField = world->array_world[ant->position];
+                    world->array_world[ant->position] = 2;
+                    step = true;
+                }
+                break;
+            default:
+                printf("Something went wrong with direction. Unexpected error.");
+                return;
+        }
+    }
+    //showWorldState(world);
+}
+
+void simulation(world_t *world, ant_t *ants, int type) {
+    while (true) {
+        for (int i = 0; i < world->ants; ++i) {
+            antsStep(world, &ants[i], type);
+        }
+        showWorldState(world);
+        usleep(3000000);
+    }
+}
 
 int main() {
     srand(time(NULL));
+    /*for (int i = 0; i < 100; ++i) {
+        printf("%d , ", (int)((double)rand() / RAND_MAX * 4));
+    }*/
     //na server sa moze pripojit viac klientov
 
     //vytvorenie sveta so zadanymi rozmermi (definovat biele cierne mravcov - #O.)
@@ -168,17 +277,31 @@ int main() {
     } else {
         defineBlackFieldsByHand(&world);
     }
-    showWorldState(&world);
+
+    ant_t antsArray[numberOfAnts];
+
+    //zmenit poziciu a smer mravcov, bud nahodne alebo zo vstupu
+    for (int i = 0; i < numberOfAnts; ++i) {
+        //double position = (double)rand() / RAND_MAX;
+        createAnt(&world, &antsArray[i],
+                  (int)((double)rand() / RAND_MAX * (rows * columns)),
+                  (int)((double)rand() / RAND_MAX * 4));
+    }
+
+    simulation(&world, antsArray, movement);
+    //showWorldState(&world);
+    //printf("%d ", -1 % 4);
 
     //nacitat/ulozit svet z/do lokalneho suboru
 
-    //definovanie koliizi mravcov na poli
+    //definovanie koliizi mravcov na poli, za mna odstranenie mravcov asi
 
-    //zapnutie a vypnutie simulacie v ktoromkolvek okamziku
+    //zapnutie a vypnutie simulacie v ktoromkolvek okamziku, iba prerusenie cyklu pravdepodobne a cakanie
 
-    //pripojenie na server a stiahnutie vzoru na local
+    //pripojenie na server a stiahnutie vzoru na local,
+    // staci si prebrat referenciu, mozno pointer na array + stlpce, riadky a mozno pocet mravcom(da sa zistit z arrayu aj) a typ pohybu
 
-    //ulozenie vzoru na server
+    //ulozenie vzoru na server, poslat array, plus parametre, v podstate celu strukturu world_t
 
 
     return 0;
