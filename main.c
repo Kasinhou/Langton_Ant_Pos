@@ -5,19 +5,11 @@
 #include <stdlib.h>
 #include <unistd.h>
 
-/*enum Direction {
-    UP,
-    DOWN,
-    RIGHT,
-    LEFT
-};*/
-
 typedef struct ant_t {
     //na akom policku stoji
     int actualField;
     int position;
     int direction; //0up 1right 2down 3left
-    //enum Direction direction;
 } ant_t;
 
 typedef struct world_t {
@@ -38,14 +30,6 @@ void createWorld(world_t *world, int rows, int columns, int ants, int movement) 
     //printf("%d %d %d %d", world->rows, world->columns, world->ants, world->movement);
 }
 
-void destroyAnt(ant_t *ant, world_t *world) {
-    //nejako mravca treba znicit mozno okrem toho ze zmenime poziciu
-    //ak sa stretnu dva tak proste zmenime na bielu
-    world->array_world[ant->position] = 1;
-    ant->position = -1;
-    world->ants--;
-}
-
 void createAnt(world_t *world, ant_t *ant, int position, int direction) {
     ant->position = position;
     ant->direction = direction;
@@ -59,6 +43,14 @@ void createAnt(world_t *world, ant_t *ant, int position, int direction) {
     }
 }
 
+void destroyAnt(ant_t *ant, world_t *world) {
+    //nejako mravca treba znicit mozno okrem toho ze zmenime poziciu
+    //ak sa stretnu dva tak proste zmenime na bielu
+    /*world->array_world[ant->position] = 1;
+    ant->position = -1;
+    world->ants--;*/
+}
+
 void destroyWorld(world_t *world) {
     free(world->array_world);
     world->rows = 0;
@@ -66,7 +58,6 @@ void destroyWorld(world_t *world) {
     world->ants = 0;
     world->movement = 0;
 }
-
 
 void generateBlackFields(world_t *world) {
     int count = world->rows * world->columns;
@@ -130,7 +121,6 @@ void antsStep(world_t *world, ant_t *ant, int type) {
     while (!step) {
         if (ant->actualField == type) {
             ant->direction = (ant->direction + 3) % 4;
-            //pohyb este
         } else {
             ant->direction = (ant->direction + 1) % 4;
         }
@@ -148,7 +138,7 @@ void antsStep(world_t *world, ant_t *ant, int type) {
                 }
                 break;
             case 1:
-                if (ant->position % world->columns != world->rows) {
+                if (ant->position % world->columns != world->columns - 1) {
                     world->array_world[ant->position] = (ant->actualField * -1);
                     ant->position++;
                     ant->actualField = world->array_world[ant->position];
@@ -188,7 +178,7 @@ void simulation(world_t *world, ant_t *ants, int type) {
             antsStep(world, &ants[i], type);
         }
         showWorldState(world);
-        usleep(3000000);
+        usleep(500000);
     }
 }
 
@@ -251,6 +241,7 @@ int main() {
         }
     }
     printf("You choose a %d movement with %d ants.\n", movement, numberOfAnts);
+    movement = (movement == 1) ? movement : -1;
 
 //---------------------------------------------------------------------------
     //generovanie nahodnych ciernych poli
@@ -289,6 +280,7 @@ int main() {
                   (int)((double)rand() / RAND_MAX * (rows * columns)),
                   (int)((double)rand() / RAND_MAX * 4));
     }
+
 
     simulation(&world, antsArray, movement);
     //showWorldState(&world);
