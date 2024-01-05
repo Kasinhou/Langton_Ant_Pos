@@ -53,7 +53,9 @@ void createAnt(world_t *world, ant_t *ant, int position, int direction) {
     if (ant->actualField != 2) {
         world->array_world[ant->position] = 2;//znak mravca
     } else {
-        destroyAnt(ant, world);
+        world->array_world[ant->position] = ant->actualField;
+        ant->position = -1;
+        world->ants--;
     }
 }
 
