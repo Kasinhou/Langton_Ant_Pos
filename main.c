@@ -30,25 +30,30 @@ void createWorld(world_t *world, int rows, int columns, int ants, int movement) 
     //printf("%d %d %d %d", world->rows, world->columns, world->ants, world->movement);
 }
 
-void createAnt(world_t *world, ant_t *ant, int position, int direction) {
+int createAnt(world_t *world, ant_t *ant, int position, int direction) {
     ant->position = position;
     ant->direction = direction;
     ant->actualField = world->array_world[ant->position];
-    if (ant->actualField != 2) {
-        world->array_world[ant->position] = 2;//znak mravca
-    } else {
-        world->array_world[ant->position] = ant->actualField;
-        ant->position = -1;
-        world->ants--;
+    if (world->array_world[ant->position] == 2) {
+        return 1;
     }
+    return 0;
+    /*if (world->array_world[ant->position] != 2) {
+        world->array_world[ant->position] = 2;
+        //world->array_world[ant->position] = 2;//znak mravca
+    } else {
+        //world->array_world[ant->position] = ant->actualField;
+        //ant->position = -1;
+        world->ants--;
+    }*/
 }
 
 void destroyAnt(ant_t *ant, world_t *world) {
     //nejako mravca treba znicit mozno okrem toho ze zmenime poziciu
     //ak sa stretnu dva tak proste zmenime na bielu
     /*world->array_world[ant->position] = 1;
-    ant->position = -1;
-    world->ants--;*/
+    ant->position = -1;*/
+    //world->ants--;
 }
 
 void destroyWorld(world_t *world) {
@@ -98,13 +103,14 @@ void showWorldState(world_t *world) {
                     printf("# ");
                     break;
                 case 1:
-                    printf("O ");
+                    printf("  ");
                     break;
                 case 2:
-                    printf("X ");
+                    printf(". ");
                     break;
                 default:
                     printf("Something went wrong with world array. Unexpected character!\n");
+                    printf("\nThis is not suppose to be here -> %d\n", world->array_world[i * world->columns + j]);
                     return;
             }
             //printf("%d ", world->array_world[i * world->columns + j]);
@@ -115,8 +121,8 @@ void showWorldState(world_t *world) {
 }
 
 //direct -> biele 1 otocka vpravo, zmena na cierne 0, type direct/inverse
-//TODO zatial bez kolizi mravcov, treba doriesit
-void antsStep(world_t *world, ant_t *ant, int type) {
+
+int antsStep(world_t *world, ant_t *ant, int type) {
     _Bool step = false;
     while (!step) {
         if (ant->actualField == type) {
@@ -128,56 +134,80 @@ void antsStep(world_t *world, ant_t *ant, int type) {
         switch (ant->direction) {
             case 0:
                 if (ant->position / world->columns != 0) {
+                    step = true;
                     //zmenit field na actual field opacnej farby, position mravca, actual field na nove, nove na 2
                     world->array_world[ant->position] = (ant->actualField * -1);
                     //zalezi od smeru vypocet
                     ant->position -= world->columns;
                     ant->actualField = world->array_world[ant->position];
-                    world->array_world[ant->position] = 2;
-                    step = true;
+                    //kolizie, ak sa stretnu ten co je tam skor ma prednost a prezil
+                    if (world->array_world[ant->position] != 2) {
+                        world->array_world[ant->position] = 2;
+                    } else {
+                        return 1;
+                    }
                 }
                 break;
             case 1:
                 if (ant->position % world->columns != world->columns - 1) {
+                    step = true;
                     world->array_world[ant->position] = (ant->actualField * -1);
                     ant->position++;
                     ant->actualField = world->array_world[ant->position];
-                    world->array_world[ant->position] = 2;
-                    step = true;
+                    if (world->array_world[ant->position] != 2) {
+                        world->array_world[ant->position] = 2;
+                    } else {
+                        return 1;
+                    }
                 }
                 break;
             case 2:
                 if (ant->position / world->columns != world->rows - 1) {
+                    step = true;
                     world->array_world[ant->position] = (ant->actualField * -1);
                     ant->position += world->columns;
                     ant->actualField = world->array_world[ant->position];
-                    world->array_world[ant->position] = 2;
-                    step = true;
+                    if (world->array_world[ant->position] != 2) {
+                        world->array_world[ant->position] = 2;
+                    } else {
+                        return 1;
+                    }
                 }
                 break;
             case 3:
                 if (ant->position % world->columns != 0) {
+                    step = true;
                     world->array_world[ant->position] = (ant->actualField * -1);
                     ant->position--;
                     ant->actualField = world->array_world[ant->position];
-                    world->array_world[ant->position] = 2;
-                    step = true;
+                    if (world->array_world[ant->position] != 2) {
+                        world->array_world[ant->position] = 2;
+                    } else {
+                        return 1;
+                    }
                 }
                 break;
             default:
                 printf("Something went wrong with direction. Unexpected error.");
-                return;
+                return -1;
         }
     }
-    //showWorldState(world);
+    return 0;
 }
 
 void simulation(world_t *world, ant_t *ants, int type) {
     while (true) {
-        for (int i = 0; i < world->ants; ++i) {
-            antsStep(world, &ants[i], type);
+        for (int i = 0; i < world->ants; i++) {
+            if (antsStep(world, &ants[i], type) == 1) {
+                for (int j = i; j < world->ants - 1; ++j) {
+                    ants[j] = ants[j + 1];
+                }
+                world->ants--;
+                i--;
+            }
         }
         showWorldState(world);
+        //printf("Number of ants = %d\n", world->ants);
         usleep(500000);
     }
 }
@@ -273,15 +303,23 @@ int main() {
 
     ant_t antsArray[numberOfAnts];
 
-    //zmenit poziciu a smer mravcov, bud nahodne alebo zo vstupu
+    //bud nahodne alebo zo vstupu, chyba vstup
     for (int i = 0; i < numberOfAnts; ++i) {
         //double position = (double)rand() / RAND_MAX;
-        createAnt(&world, &antsArray[i],
+        if (createAnt(&world, &antsArray[i],
                   (int)((double)rand() / RAND_MAX * (rows * columns)),
-                  (int)((double)rand() / RAND_MAX * 4));
+                  (int)((double)rand() / RAND_MAX * 4)) == 1) {
+            for (int j = 0; j < numberOfAnts; ++j) {
+                antsArray[j] = antsArray[j + 1];
+            }
+            numberOfAnts--;
+            world.ants--;
+            i--;
+        }
     }
 
-
+    printf("numberOfAnts = %d\n", numberOfAnts);
+    printf("world->ants = %d\n", world.ants);
     simulation(&world, antsArray, movement);
     //showWorldState(&world);
     //printf("%d ", -1 % 4);
