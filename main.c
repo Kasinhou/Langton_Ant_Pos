@@ -96,17 +96,22 @@ void defineBlackFieldsByHand(world_t *world) {
 }
 
 void showWorldState(world_t *world) {
+    printf("\n");
+    for (int i = 0; i < world->columns; ++i) {
+        printf("----");
+    }
+    printf("-\n");
     for (int i = 0; i < world->rows; ++i) {
         for (int j = 0; j < world->columns; ++j) {
             switch (world->array_world[i * world->columns + j]) {
                 case -1:
-                    printf("# ");
+                    printf("| # ");
                     break;
                 case 1:
-                    printf("  ");
+                    printf("|   ");
                     break;
                 case 2:
-                    printf(". ");
+                    printf("| . ");
                     break;
                 default:
                     printf("Something went wrong with world array. Unexpected character!\n");
@@ -115,7 +120,11 @@ void showWorldState(world_t *world) {
             }
             //printf("%d ", world->array_world[i * world->columns + j]);
         }
-        printf("\n");
+        printf("|\n");
+        for (int j = 0; j < world->columns; ++j) {
+            printf("----");
+        }
+        printf("-\n");
     }
     printf("\n");
 }
@@ -208,7 +217,7 @@ void simulation(world_t *world, ant_t *ants, int type) {
         }
         showWorldState(world);
         //printf("Number of ants = %d\n", world->ants);
-        usleep(500000);
+        usleep(1000000);
     }
 }
 
