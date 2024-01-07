@@ -14,50 +14,34 @@
 #include "pos_sockets/active_socket.h"
 #include "pos_sockets/passive_socket.h"
 
-typedef struct point {
+
+/*typedef struct point {
     double x;
     double y;
-} POINT;
+} POINT;*/
 
-/*POINT generate_point(void) {
-    double x = 2 * (rand() / (double)RAND_MAX) - 1;
-    double y = 2 * (rand() / (double)RAND_MAX) - 1;
-    POINT point = {x, y};
-    return point;
-}*/
-
-
-typedef struct pi_estimation {
+/*typedef struct pi_estimation {
     long long total_count;
     long long inside_count;
-} PI_ESTIMATION_DATA;
+} PI_ESTIMATION_DATA;*/
 
-/*_Bool pi_estimation_try_deserialize(struct pi_estimation* pi_estimation, struct char_buffer* buf) {
-    if (sscanf(buf->data, "%lld;%lld;", &pi_estimation->total_count, &pi_estimation->inside_count) == 2) {
-        return true;
-    }
-    return false;
-}*/
-
-GENERATE_BUFFER(struct point, point)
+//GENERATE_BUFFER(struct point, point)
 
 
 typedef struct thread_data {
-    //long long replications_count;
-    struct buffer_point buf;
+    //struct buffer_point buf;
     pthread_mutex_t mutex;
     pthread_cond_t is_full;
     pthread_cond_t is_empty;
 
     short port;
     ACTIVE_SOCKET* my_socket;
-} THREAD_DATA;
+} thread_data_t;
 
 
-void thread_data_init(struct thread_data* data, int buffer_capacity,
+void thread_data_init(thread_data_t* data, int buffer_capacity,
                       short port, ACTIVE_SOCKET* my_socket) {
-    //data->replications_count = replications_count;
-    buffer_point_init(&data->buf, buffer_capacity);
+    //buffer_point_init(&data->buf, buffer_capacity);
     pthread_mutex_init(&data->mutex, NULL);
     pthread_cond_init(&data->is_full, NULL);
     pthread_cond_init(&data->is_empty, NULL);
@@ -66,9 +50,8 @@ void thread_data_init(struct thread_data* data, int buffer_capacity,
     data->my_socket = my_socket;
 }
 
-void thread_data_destroy(struct thread_data* data) {
-    //data->replications_count = 0;
-    buffer_point_destroy(&data->buf);
+void thread_data_destroy(thread_data_t* data) {
+    //buffer_point_destroy(&data->buf);
     pthread_mutex_destroy(&data->mutex);
     pthread_cond_destroy(&data->is_full);
     pthread_cond_destroy(&data->is_empty);
@@ -76,40 +59,6 @@ void thread_data_destroy(struct thread_data* data) {
     data->port = 0;
     data->my_socket = NULL;
 }
-
-/*void* produce(void* thread_data) {
-    struct thread_data* data = (struct thread_data*)thread_data;
-
-    for (long long i = 1; i <= data->replications_count; ++i) {
-        POINT item = generate_point();
-
-        pthread_mutex_lock(&data->mutex);
-        while (!buffer_point_try_push(&data->buf, item)) {
-            pthread_cond_wait(&data->is_empty, &data->mutex);
-        }
-        pthread_cond_signal(&data->is_full);
-        pthread_mutex_unlock(&data->mutex);
-    }
-    return NULL;
-}*/
-
-/*_Bool try_get_client_pi_estimation(struct active_socket* my_sock, struct pi_estimation* client_pi_estimaton) {
-    CHAR_BUFFER buf;
-    char_buffer_init(&buf);
-    _Bool result = false;
-    if (active_socket_try_get_read_data(my_sock, &buf)) {
-        if (!pi_estimation_try_deserialize(client_pi_estimaton, &buf)) { //do objektu chcem ulozit buffer
-            if (active_socket_is_end_message(my_sock, &buf)) {
-                active_socket_stop_reading(my_sock);
-            }
-        }
-        else {
-            result = true;
-        }
-    }
-    char_buffer_destroy(&buf);
-    return result;
-}*/
 
 typedef struct ant_t {
     //na akom policku stoji
@@ -144,6 +93,10 @@ _Bool world_try_deserialize(world_t *world, struct char_buffer* buf) {
     }
     printf("\nneuspesne bohuzial\n");
     return false;
+}
+
+_Bool serialize_world(world_t *world, char *buf, size_t bufSize) {
+    snprintf(buf, bufSize, "");
 }
 
 _Bool try_get_client_data(struct active_socket* my_sock, world_t* client_input_data) {
@@ -264,7 +217,6 @@ void showWorldState(world_t *world) {
 }
 
 //direct -> biele 1 otocka vpravo, zmena na cierne 0, type direct/inverse
-
 int antsStep(world_t *world, ant_t *ant, int type) {
     _Bool step = false;
     while (!step) {
@@ -355,53 +307,78 @@ void simulation(world_t *world, ant_t *ants, int type) {
     }
 }
 
+//tuto mozno pouzit mutex ale vlastne neviem na co presne
+void* handle_client_data(void* thread_data) {
+    struct thread_data* data = (struct thread_data*)thread_data;
+    printf("\n---->Skusanie ziskavania info od klienta\n");
+    world_t world;
+    active_socket_start_reading(data->my_socket);
+    if (data->my_socket != NULL) {//transfomrovat aelbo deserializovat socket data  do world
+        try_get_client_data(data->my_socket, &world);
+        printf("NIE JE NULL!!!");
+        createWorld(&world, world.rows, world.columns, world.ants, world.movement);
+        generateBlackFields(&world);
+
+        ant_t antsArray[world.ants];
+
+        //bud nahodne alebo zo vstupu, chyba vstup
+        for (int i = 0; i < world.ants; ++i) {
+            //double position = (double)rand() / RAND_MAX;
+            if (createAnt(&world, &antsArray[i],
+                          (int)((double)rand() / RAND_MAX * (world.rows * world.columns)),
+                          (int)((double)rand() / RAND_MAX * 4)) == 1) {
+                for (int j = 0; j < world.ants; ++j) {
+                    antsArray[j] = antsArray[j + 1];
+                }
+                world.ants--;
+                i--;
+            }
+        }
+
+        simulation(&world, antsArray, world.movement);
+        //free(data);
+    }
+    else {
+        printf("JE NULL!!!");
+    }
+    printf("Rows: %d\nColumns: %d\nAnts: %d\nMovement: %d\n", world.rows, world.columns, world.ants, world.movement);
+    //active_socket_stop_reading(data->my_socket);
+    return NULL;
+}
+
 void* process_client_data(void* thread_data) {
     struct thread_data* data = (struct thread_data*)thread_data;
     PASSIVE_SOCKET sock;
     passive_socket_init(&sock);
     passive_socket_start_listening(&sock, data->port);
+    //tu vytvorit nove vlakno kde bude activestartreading
     passive_socket_wait_for_client(&sock, data->my_socket);
     if (passive_socket_is_listening(&sock)) {
-        printf("\n---->Skusanie ziskavania info od klienta\n");
-        world_t world;
-        active_socket_start_reading(data->my_socket);
-        if (data->my_socket != NULL) {//transfomrovat aelbo deserializovat socket data  do world
-            try_get_client_data(data->my_socket, &world);
-            printf("NIE JE NULL!!!");
-            createWorld(&world, world.rows, world.columns, world.ants, world.movement);
-            generateBlackFields(&world);
-
-            ant_t antsArray[world.ants];
-
-            //bud nahodne alebo zo vstupu, chyba vstup
-            for (int i = 0; i < world.ants; ++i) {
-                //double position = (double)rand() / RAND_MAX;
-                if (createAnt(&world, &antsArray[i],
-                              (int)((double)rand() / RAND_MAX * (world.rows * world.columns)),
-                              (int)((double)rand() / RAND_MAX * 4)) == 1) {
-                    for (int j = 0; j < world.ants; ++j) {
-                        antsArray[j] = antsArray[j + 1];
-                    }
-                    world.ants--;
-                    i--;
-                }
+        handle_client_data(data);
+    }
+    /*while (true) {
+        pthread_t client_thread;
+        passive_socket_wait_for_client(&sock, data->my_socket);
+        printf("wait for client\n");
+        if (passive_socket_is_listening(&sock)) {
+            struct thread_data* data_for_client = (struct thread_data*)malloc(sizeof(struct thread_data));
+            if (data_for_client == NULL) {
+                printf("Data pre klienta su zle");
+                break;
             }
 
-            simulation(&world, antsArray, world.movement);
-
+            if (pthread_create(&client_thread, NULL, handle_client_data, &data_for_client) != 0) {
+                printf("Client thread sa z nejakho dovodu nevytvoril.\n");
+                free(data_for_client);
+            } else {
+                pthread_detach(client_thread);
+                printf("detach");
+            }
+            //handle_client_data(data);
         }
-        else {
-            printf("JE NULL!!!");
-        }
-        printf("Rows: %d\nColumns: %d\nAnts: %d\nMovement: %d\n", world.rows, world.columns, world.ants, world.movement);
-
-    }
-    //tu vytvorit nove vlakno kde bude activestartreading
+    }*/
     passive_socket_stop_listening(&sock);//while pas sock is listening-. wait for client
     passive_socket_destroy(&sock);
-
-    //tuto treba
-    //active_socket_start_reading(data->my_socket);
 
     return NULL;
 }
@@ -463,7 +440,7 @@ int main(int argc, char* argv[]) {
     //pthread_create(&th_produce, NULL, produce, &data);
     pthread_create(&th_receive, NULL, process_client_data, &data);
 
-    main_consument(&data);
+    //main_consument(&data);
 
     //pthread_join(th_produce, NULL);
     pthread_join(th_receive, NULL);
