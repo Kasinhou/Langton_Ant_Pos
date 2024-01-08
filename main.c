@@ -398,7 +398,7 @@ void simulation(world_t *world, ant_t *ants, int type) {
                 i--;
             }
         }
-        sendMessageToClient(world);
+        //sendMessageToClient(world);
         //transform_to_buffer(world);
         //showWorldState(world);
         usleep(1000000);
@@ -432,6 +432,15 @@ void* handle_client_data(void* thread_data) {
                 i--;
             }
         }
+
+        struct char_buffer clientMess;
+        char znak = 'A';
+        char_buffer_init(&clientMess);
+
+        char_buffer_append(&clientMess, &znak, sizeof(char));
+        active_socket_write_data(data->my_socket, &clientMess);
+        active_socket_write_end_message(data->my_socket);
+        printf("Znak = %c \n", clientMess.data[0]);
 
         simulation(&world, antsArray, world.movement);
         //free(data);
