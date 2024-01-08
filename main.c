@@ -9,27 +9,14 @@
 #include <pthread.h>
 #include <sys/socket.h>
 #include <arpa/inet.h>
-#include "buffer.h"
+#include <string.h>
+#include <netdb.h>
 #include "pos_sockets/char_buffer.h"
 #include "pos_sockets/active_socket.h"
 #include "pos_sockets/passive_socket.h"
 
 
-/*typedef struct point {
-    double x;
-    double y;
-} POINT;*/
-
-/*typedef struct pi_estimation {
-    long long total_count;
-    long long inside_count;
-} PI_ESTIMATION_DATA;*/
-
-//GENERATE_BUFFER(struct point, point)
-
-
 typedef struct thread_data {
-    //struct buffer_point buf;
     pthread_mutex_t mutex;
     pthread_cond_t is_full;
     pthread_cond_t is_empty;
@@ -39,9 +26,7 @@ typedef struct thread_data {
 } thread_data_t;
 
 
-void thread_data_init(thread_data_t* data, int buffer_capacity,
-                      short port, ACTIVE_SOCKET* my_socket) {
-    //buffer_point_init(&data->buf, buffer_capacity);
+void thread_data_init(thread_data_t* data, short port, ACTIVE_SOCKET* my_socket) {
     pthread_mutex_init(&data->mutex, NULL);
     pthread_cond_init(&data->is_full, NULL);
     pthread_cond_init(&data->is_empty, NULL);
@@ -51,7 +36,6 @@ void thread_data_init(thread_data_t* data, int buffer_capacity,
 }
 
 void thread_data_destroy(thread_data_t* data) {
-    //buffer_point_destroy(&data->buf);
     pthread_mutex_destroy(&data->mutex);
     pthread_cond_destroy(&data->is_full);
     pthread_cond_destroy(&data->is_empty);
@@ -95,10 +79,6 @@ _Bool world_try_deserialize(world_t *world, struct char_buffer* buf) {
     return false;
 }
 
-_Bool serialize_world(world_t *world, char *buf, size_t bufSize) {
-    snprintf(buf, bufSize, "");
-}
-
 _Bool try_get_client_data(struct active_socket* my_sock, world_t* client_input_data) {
     CHAR_BUFFER buf;
     char_buffer_init(&buf);
@@ -121,9 +101,9 @@ _Bool try_get_client_data(struct active_socket* my_sock, world_t* client_input_d
     return result;
 }
 
-void* main_consument(void* thread_data) {
+/*void* main_consument(void* thread_data) {
     return NULL;
-}
+}*/
 
 int createAnt(world_t *world, ant_t *ant, int position, int direction) {
     ant->position = position;
@@ -133,14 +113,6 @@ int createAnt(world_t *world, ant_t *ant, int position, int direction) {
         return 1;
     }
     return 0;
-}
-
-void destroyAnt(ant_t *ant, world_t *world) {
-    //nejako mravca treba znicit mozno okrem toho ze zmenime poziciu
-    //ak sa stretnu dva tak proste zmenime na bielu
-    /*world->array_world[ant->position] = 1;
-    ant->position = -1;*/
-    //world->ants--;
 }
 
 void destroyWorld(world_t *world) {
@@ -290,6 +262,131 @@ int antsStep(world_t *world, ant_t *ant, int type) {
     return 0;
 }
 
+void transform_to_buffer(world_t *world) {
+    char buffer[1024];
+    for (int i = 0; i < world->rows; ++i) {
+        for (int j = 0; j < world->columns; ++j) {
+            buffer[i * world->columns + j] = (char)world->array_world[i * world->columns + j];
+        }
+    }
+    int sockfd, n;
+    struct sockaddr_in serv_addr;
+    struct hostent* server;
+
+    //char buffer[256];
+
+    server = gethostbyname("localhost");
+    if (server == NULL)
+    {
+        fprintf(stderr, "Error, no such host\n");
+        return;
+    }
+
+    bzero((char*)&serv_addr, sizeof(serv_addr));
+    serv_addr.sin_family = AF_INET;
+    bcopy(
+            (char*)server->h_addr,
+            (char*)&serv_addr.sin_addr.s_addr,
+            server->h_length
+    );
+    serv_addr.sin_port = htons(atoi("11112"));
+
+    sockfd = socket(AF_INET, SOCK_STREAM, 0);
+    if (sockfd < 0)
+    {
+        perror("Error creating socket");
+        return;
+    }
+
+    if(connect(sockfd, (struct sockaddr*)&serv_addr, sizeof(serv_addr)) < 0)
+    {
+        perror("Error connecting to socket");
+        return;
+    }
+
+    /*printf("Please enter a message: ");
+    bzero(buffer,256);
+    fgets(buffer, 255, stdin);*/
+
+    n = write(sockfd, buffer, strlen(buffer));
+    if (n < 0)
+    {
+        perror("Error writing to socket");
+        return;
+    }
+
+    //bzero(buffer,256);
+    n = read(sockfd, buffer, sizeof(buffer));
+    if (n < 0)
+    {
+        perror("Error reading from socket");
+        return;
+    }
+
+    printf("%s\n",buffer);
+    close(sockfd);
+
+}
+
+void sendMessageToClient(world_t *world) {
+    char buffer[1024];
+    for (int i = 0; i < world->rows; ++i) {
+        for (int j = 0; j < world->columns; ++j) {
+            buffer[i * world->columns + j] = (char)world->array_world[i * world->columns + j];
+        }
+    }
+
+    int serverSocket, clientSocket;
+    struct sockaddr_in serverAddr, clientAddr;
+    socklen_t clientAddrLen = sizeof(clientAddr);
+
+    // Create socket
+    serverSocket = socket(AF_INET, SOCK_STREAM, 0);
+    if (serverSocket == -1) {
+        perror("Error creating socket");
+        exit(EXIT_FAILURE);
+    }
+
+    //adresa
+    memset(&serverAddr, 0, sizeof(serverAddr));
+    serverAddr.sin_family = AF_INET;
+    serverAddr.sin_addr.s_addr = INADDR_ANY;
+    serverAddr.sin_port = htons(11112);
+
+    if (bind(serverSocket, (struct sockaddr*)&serverAddr, sizeof(serverAddr)) == -1) {
+        perror("Error binding socket");
+        close(serverSocket);
+        exit(EXIT_FAILURE);
+    }
+
+    //5mozu cakat, respektive
+    if (listen(serverSocket, 5) == -1) {
+        perror("Error listening");
+        close(serverSocket);
+        exit(EXIT_FAILURE);
+    }
+
+    printf("Server listening on port %d...\n", 11112);
+
+    clientSocket = accept(serverSocket, (struct sockaddr*)&clientAddr, &clientAddrLen);
+    if (clientSocket == -1) {
+        perror("Error accepting connection");
+        close(serverSocket);
+        exit(EXIT_FAILURE);
+    }
+
+    printf("Client connected\n");
+
+    //poslanie buffra s datami klientovi
+    if (send(clientSocket, buffer, strlen(buffer), 0) == -1) {
+        perror("Error sending data");
+    }
+
+    //neviem ci treba
+    close(clientSocket);
+    close(serverSocket);
+}
+
 void simulation(world_t *world, ant_t *ants, int type) {
     while (true) {
         for (int i = 0; i < world->ants; i++) {
@@ -301,13 +398,14 @@ void simulation(world_t *world, ant_t *ants, int type) {
                 i--;
             }
         }
-        showWorldState(world);
-        //printf("Number of ants = %d\n", world->ants);
+        sendMessageToClient(world);
+        //transform_to_buffer(world);
+        //showWorldState(world);
         usleep(1000000);
     }
 }
 
-//tuto mozno pouzit mutex ale vlastne neviem na co presne
+//konkretne vlakno pre klienta
 void* handle_client_data(void* thread_data) {
     struct thread_data* data = (struct thread_data*)thread_data;
     printf("\n---->Skusanie ziskavania info od klienta\n");
@@ -353,6 +451,7 @@ void* process_client_data(void* thread_data) {
     passive_socket_start_listening(&sock, data->port);
     //tu vytvorit nove vlakno kde bude activestartreading
     passive_socket_wait_for_client(&sock, data->my_socket);
+    passive_socket_is_listening(&sock);
     if (passive_socket_is_listening(&sock)) {
         handle_client_data(data);
     }
@@ -386,32 +485,13 @@ void* process_client_data(void* thread_data) {
 /*void* consume(void* thread_data) {
     struct thread_data* data = (struct thread_data*)thread_data;
 
-    struct pi_estimation pi_estimaton = {0, 0};
-    struct pi_estimation client_pi_estimaton = {0, 0};
-    for (long long i = 1; i <= data->replications_count; ++i) {
-        POINT item;
-
-        pthread_mutex_lock(&data->mutex);
-        while (!buffer_point_try_pop(&data->buf, &item)) {
-            pthread_cond_wait(&data->is_full, &data->mutex);
-        }
-        pthread_cond_signal(&data->is_empty);
-        pthread_mutex_unlock(&data->mutex);
-
+    if (data->my_socket != NULL) {//transfomrovat aelbo deserializovat socket data  do client pi est
+        try_get_client_pi_estimation(data->my_socket, &client_pi_estimaton);
         printf("%ld: ", i);
-        ++pi_estimaton.total_count;
-        if (item.x * item.x + item.y * item.y <= 1) {
-            ++pi_estimaton.inside_count;
-        }
-        printf("Odhad pi: %lf\n", 4 * (double)pi_estimaton.inside_count / (double)pi_estimaton.total_count);
-
-        if (data->my_socket != NULL) {//transfomrovat aelbo deserializovat socket data  do client pi est
-            try_get_client_pi_estimation(data->my_socket, &client_pi_estimaton);
-            printf("%ld: ", i);
-            printf("Odhad pi s vyuzitim dat od klienta: %lf\n",
-                   4 * (double)(pi_estimaton.inside_count + client_pi_estimaton.inside_count) /
-                   (double)(pi_estimaton.total_count + client_pi_estimaton.total_count));
-        }
+        printf("Odhad pi s vyuzitim dat od klienta: %lf\n",
+               4 * (double)(pi_estimaton.inside_count + client_pi_estimaton.inside_count) /
+               (double)(pi_estimaton.total_count + client_pi_estimaton.total_count));
+    }
     }
     if (data->my_socket != NULL) {
         while (active_socket_is_reading(data->my_socket)) {
@@ -435,7 +515,7 @@ int main(int argc, char* argv[]) {
     struct active_socket my_socket;
 
     active_socket_init(&my_socket);
-    thread_data_init(&data, 10, 11112, &my_socket);
+    thread_data_init(&data, 11112, &my_socket);
 
     //pthread_create(&th_produce, NULL, produce, &data);
     pthread_create(&th_receive, NULL, process_client_data, &data);
@@ -445,13 +525,9 @@ int main(int argc, char* argv[]) {
     //pthread_join(th_produce, NULL);
     pthread_join(th_receive, NULL);
 
+
     thread_data_destroy(&data);
     active_socket_destroy(&my_socket);
-
-    /*for (int i = 0; i < 100; ++i) {
-        printf("%d , ", (int)((double)rand() / RAND_MAX * 4));
-    }*/
-    //na server sa moze pripojit viac klientov
 
     //vytvorenie sveta so zadanymi rozmermi (definovat biele cierne mravcov - #O.)
     /*int rows, columns;
